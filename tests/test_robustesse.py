@@ -67,3 +67,37 @@ def test_rag_error_sans_status():
     err = RagError("simple")
     assert err.status_code is None
     assert str(err) == "simple"
+
+
+def _doc(uid, day):
+    return {"chunk_id": uid, "doc_id": "d", "text": "t",
+            "score": 0.5, "metadata": {"city": "Paris", "date": day}, "origin": "test"}
+
+
+def test_dates_surfetch_et_filtre():
+    payload = {"results": [_doc("vieux", "2025-01-01"), _doc("bon", "2026-06-01"),
+                           _doc("futur", "2027-01-01"), _doc("sans-date", "")]}
+    with patch.object(backend.httpx, "post", return_value=_resp(200, payload)) as p:
+        out = query_rag("x", top_k=2, date_min="2026-01-01", date_max="2026-12-31")
+        _, kw = p.call_args
+        assert kw["json"]["top_k"] == 6  # surfetch x3 pour compenser le filtre client
+        assert [r["chunk_id"] for r in out] == ["bon", "sans-date"]
+
+
+def test_sans_dates_pas_de_surfetch():
+    with patch.object(backend.httpx, "post", return_value=_resp(200)) as p:
+        query_rag("x", top_k=4)
+        _, kw = p.call_args
+        assert kw["json"]["top_k"] == 4
+
+
+def test_in_range_formats():
+    import datetime
+    from backend import _in_range
+    assert _in_range("2026-06-03T16:30:00+00:00", "2026-01-01", "2026-12-31") is True
+    assert _in_range("2025-01-01", "2026-01-01", "") is False
+    assert _in_range(datetime.datetime(2026, 6, 3, 16, 30), "2026-01-01", "") is True
+    assert _in_range(datetime.date(2025, 1, 1), "2026-01-01", "") is False
+    assert _in_range("pas-une-date", "2026-01-01", "") is True
+    assert _in_range(None, "2026-01-01", "") is True
+    assert _in_range("2026-06-03", "", "") is True

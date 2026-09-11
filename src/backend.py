@@ -7,7 +7,7 @@ import argparse
 import httpx
 from typing import List
 from pydantic import Field
-from datetime import datetime
+from datetime import date, datetime
 
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
@@ -23,17 +23,46 @@ class RagError(Exception):
         self.status_code = status_code
 
 
-def query_rag(query: str, top_k: int = 5, city: str = "") -> list:
+def _parse_day(value):
+    """Jour civil depuis datetime/date/ISO. None si inexploitable."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.strptime(str(value or "").strip()[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _in_range(meta_date, date_min: str, date_max: str) -> bool:
+    """Filtre date client : le RAG ne sait faire que de l'egalite exacte (best-effort)."""
+    if not date_min and not date_max:
+        return True
+    day = _parse_day(meta_date)
+    if day is None:
+        return True  # pas de date exploitable : on garde (best-effort)
+    dmin = _parse_day(date_min)
+    dmax = _parse_day(date_max)
+    if dmin and day < dmin:
+        return False
+    if dmax and day > dmax:
+        return False
+    return True
+
+
+def query_rag(query: str, top_k: int = 5, city: str = "", date_min: str = "", date_max: str = "") -> list:
     """Appel direct POST /query (lecture seule, on ne touche jamais au RAG)."""
     if not query.strip():
         raise ValueError("Question vide.")
     filters = {}
     if city.strip():
         filters = {"city": city.strip()}
+    fetch_k = top_k * 3 if (date_min or date_max) else top_k
     try:
         r = httpx.post(
             f"{RAG_BASE_URL}/query",
-            json={"query": query, "top_k": top_k, "filters": filters},
+            json={"query": query, "top_k": fetch_k, "filters": filters},
             headers={"Authorization": f"Bearer {RAGIFIX_API_TOKEN}"},
             timeout=20.0,
         )
@@ -46,15 +75,21 @@ def query_rag(query: str, top_k: int = 5, city: str = "") -> list:
     if r.status_code != 200:
         raise RagError(f"Erreur RAG inattendue ({r.status_code}) : {r.text[:200]}", r.status_code)
     data = r.json()
-    return data.get("results", [])
+    results = data.get("results", [])
+    results = [res for res in results
+               if _in_range((res.get("metadata") or {}).get("date"), date_min, date_max)]
+    return results[:top_k]
 
 
 class RagifixRetriever(BaseRetriever):
     top_k: int = Field(default=5)
     city: str = Field(default="")
+    date_min: str = Field(default="")
+    date_max: str = Field(default="")
 
     def _get_relevant_documents(self, query: str, *, run_manager=None) -> List[Document]:
-        results = query_rag(query, top_k=self.top_k, city=self.city)
+        results = query_rag(query, top_k=self.top_k, city=self.city,
+                            date_min=self.date_min, date_max=self.date_max)
         docs = []
         for res in results:
             meta = res.get("metadata", {}) or {}
@@ -74,13 +109,13 @@ PROMPT_FR = ChatPromptTemplate.from_messages([
 ])
 
 
-def ask(question: str, city: str = "", top_k: int = 5) -> dict:
+def ask(question: str, city: str = "", top_k: int = 5, date_min: str = "", date_max: str = "") -> dict:
     """Chaine RAG : retrieve puis ChatMistralAI (ou endpoint custom via LLM_BASE_URL)."""
     if not question.strip():
         raise ValueError("Question vide.")
     if not LLM_BASE_URL and not MISTRAL_API_KEY:
         raise RagError("MISTRAL_API_KEY manquante (voir .env).")
-    retriever = RagifixRetriever(top_k=top_k, city=city)
+    retriever = RagifixRetriever(top_k=top_k, city=city, date_min=date_min, date_max=date_max)
     docs = retriever.invoke(question)
     if not docs:
         return {"answer": "Je n'ai rien trouvé pour cette recherche.", "sources": []}
@@ -100,9 +135,11 @@ def main(argv=None):
     p.add_argument("question")
     p.add_argument("--city", default="")
     p.add_argument("--top-k", type=int, default=5)
+    p.add_argument("--date-min", default="")
+    p.add_argument("--date-max", default="")
     a = p.parse_args(argv)
     try:
-        res = ask(a.question, city=a.city, top_k=a.top_k)
+        res = ask(a.question, city=a.city, top_k=a.top_k, date_min=a.date_min, date_max=a.date_max)
         print(res["answer"])
         print("\n--- Sources ---")
         for d in res["sources"]:
