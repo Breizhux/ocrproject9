@@ -85,7 +85,7 @@ def ask(question: str, city: str = "", top_k: int = 5) -> dict:
     if not docs:
         return {"answer": "Je n'ai rien trouvé pour cette recherche.", "sources": []}
     date = datetime.now().strftime("Nous sommes le %d %h %Y")
-    context = "\n\n---\n\n".join(d.page_content for d in docs)
+    context = date+"\n\n---\n\n".join(d.page_content for d in docs)
     kwargs = {"model": LLM_MODEL, "api_key": MISTRAL_API_KEY or "not-needed"}
     if LLM_BASE_URL:
         kwargs["endpoint"] = LLM_BASE_URL
