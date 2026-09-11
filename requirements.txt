@@ -4,3 +4,4 @@ httpx
 streamlit
 python-dotenv
 pytest
+pytest-cov

@@ -7,6 +7,7 @@ import argparse
 import httpx
 from typing import List
 from pydantic import Field
+from datetime import datetime
 
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
@@ -79,10 +80,11 @@ def ask(question: str, city: str = "", top_k: int = 5) -> dict:
         raise ValueError("Question vide.")
     if not LLM_BASE_URL and not MISTRAL_API_KEY:
         raise RagError("MISTRAL_API_KEY manquante (voir .env).")
-    retriever = RagifixRetriever(top_k=top_k, city=city or "")
+    retriever = RagifixRetriever(top_k=top_k, city=city)
     docs = retriever.invoke(question)
     if not docs:
         return {"answer": "Je n'ai rien trouvé pour cette recherche.", "sources": []}
+    date = datetime.now().strftime("Nous sommes le %d %h %Y")
     context = "\n\n---\n\n".join(d.page_content for d in docs)
     kwargs = {"model": LLM_MODEL, "api_key": MISTRAL_API_KEY or "not-needed"}
     if LLM_BASE_URL:
@@ -93,12 +95,12 @@ def ask(question: str, city: str = "", top_k: int = 5) -> dict:
     return {"answer": out.content, "sources": docs}
 
 
-if __name__ == "__main__":
+def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("question")
     p.add_argument("--city", default="")
     p.add_argument("--top-k", type=int, default=5)
-    a = p.parse_args()
+    a = p.parse_args(argv)
     try:
         res = ask(a.question, city=a.city, top_k=a.top_k)
         print(res["answer"])
@@ -108,3 +110,7 @@ if __name__ == "__main__":
             print(f"- [{m.get('score', 0):.2f}] {m.get('city', '?')} | {d.page_content[:120]}...")
     except (ValueError, RagError) as e:
         print(f"Erreur : {e}")
+
+
+if __name__ == "__main__":
+    main()
