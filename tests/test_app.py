@@ -62,3 +62,25 @@ def test_sans_sources():
     with patch.object(backend, "ask", return_value={"answer": "rien", "sources": []}):
         at = _run(question="jazz")
     assert len(at.info) == 1
+
+
+def test_defauts_filtres():
+    import datetime
+    at = AppTest.from_file(APP).run()
+    assert at.number_input[0].value == 5
+    assert at.text_input[1].value == ""
+    assert at.date_input[0].value == datetime.date.today()
+    assert at.date_input[1].value is None
+
+
+def test_filtres_transmis_a_ask():
+    import datetime
+    with patch.object(backend, "ask", return_value={"answer": "ok", "sources": []}) as m:
+        at = AppTest.from_file(APP).run()
+        at.text_input[0].set_value("jazz").run()
+        at.date_input[0].set_value(datetime.date(2026, 1, 1)).run()
+        at.button[0].click().run()
+    _, kw = m.call_args
+    assert kw["date_min"] == "2026-01-01"
+    assert kw["date_max"] == ""
+    assert kw["top_k"] == 5

@@ -37,9 +37,9 @@ flowchart LR
 
 ## 3. Détail des briques
 
-- **ragifix-collector (ETL)** : lit `events_propres.csv`, nettoie et découpe par événement, pousse vers `ragifix`.
-- **ragifix (API + FAISS)** : `http://127.0.0.1:8421`. `GET /health` (sans auth), `POST /query {"query","top_k","filters"}` (Bearer `$RAGIFIX_API_TOKEN`). Embeddings Mistral, index FAISS, métadonnées `{city,date,status,uid}`.
-- **ocrproject9 (chatbot, ce dépôt)** : `src/config.py` lit `.env` ; `src/backend.py` = client `/query` + `RagifixRetriever` (`BaseRetriever` → `Document`) + `ask(question, city, top_k)` = retrieve puis `ChatMistralAI` (`mistral-small-latest`, prompt FR, réponse grounded, pas d'historique) ; `src/app.py` = Streamlit (question + ville + top_k, réponse + Sources, gestion vide/401/500).
+- **ragifix-collector (ETL)** : lit `events_propres.csv`, nettoie et découpe par événement, pousse vers `ragifix` via son API.
+- **ragifix** : lors de la réception d'un document, réalise le parsing, le chunking, l'embedding, puis stocke dans une base de données FAISS.
+- **ocrproject9 (ce dépôt)** : `src/config.py` lit `.env` ; `src/backend.py` = client pour l'endpoint `/query` de ragifix + `RagifixRetriever` pour s'intégrer avec langchain + `ask(question, city, top_k)` = toolchain de réponse du LLM avec appel du rag ; `src/app.py` = Streamlit.
 
 ```mermaid
 sequenceDiagram
@@ -59,4 +59,4 @@ sequenceDiagram
 
 ## 4. Pourquoi 4 dépôts ?
 
-La consigne suppose un seul dépôt, mais le RAG préexistait (alternance Niji) en 3 briques : `ragifix` (API), `ragifix-collector` (ETL), `ragifix-mcp` (pont MCP). `ocrproject9` est uniquement le chatbot Étape 4, qui réutilise ce RAG sans le modifier.
+La consigne suppose un seul dépôt, mais le RAG préexistait (alternance Niji) en 3 briques : `ragifix` (API), `ragifix-collector` (ETL). `ocrproject9` est uniquement le chatbot Étape 4, qui réutilise ce RAG sans le modifier.

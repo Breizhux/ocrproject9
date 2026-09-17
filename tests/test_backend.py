@@ -101,3 +101,22 @@ def test_retriever_defaults():
     r = RagifixRetriever()
     assert r.top_k == 5
     assert r.city == ""
+    assert r.date_min == ""
+    assert r.date_max == ""
+
+
+def test_ask_filtre_dates():
+    from langchain_core.runnables import RunnableLambda
+
+    docs = {"results": [
+        {"chunk_id": "vieux", "doc_id": "d", "text": "vieux concert", "score": 0.9,
+         "metadata": {"city": "Paris", "date": "2025-01-01"}, "origin": "test"},
+        {"chunk_id": "bon", "doc_id": "d", "text": "bon concert", "score": 0.8,
+         "metadata": {"city": "Paris", "date": "2026-06-01"}, "origin": "test"},
+    ]}
+    fake = RunnableLambda(lambda x: type("O", (), {"content": "ok"})())
+    with patch.object(backend, "MISTRAL_API_KEY", "test-key"):
+        with patch.object(backend.httpx, "post", return_value=_resp(docs)):
+            with patch.object(backend, "ChatMistralAI", return_value=fake):
+                res = ask("concert", date_min="2026-01-01", date_max="2026-12-31")
+                assert [d.metadata["chunk_id"] for d in res["sources"]] == ["bon"]
