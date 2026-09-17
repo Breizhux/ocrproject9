@@ -1,0 +1,7 @@
+# Dépendances runtime du chatbot seul (deploy/) : sans pytest ni eval,
+# pour une image plus légère que requirements.txt (dev).
+langchain
+langchain-mistralai
+httpx
+streamlit
+python-dotenv
