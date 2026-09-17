@@ -23,6 +23,13 @@ streamlit run src/app.py
 
 Tests : `pytest` (26 tests, ~99 % couverts). CLI : `python src/backend.py "question ?" --city Paris --top-k 5`.
 
+## Eval (`eval/`, requiert RAG + boîte LLM lancés, `.env` renseigné)
+
+- `dataset.jsonl` : 10 QA annotées (`question`/`city`/`top_k`/`reponse_attendue`).
+- `api_test.py` : `python eval/api_test.py` — 5 checks HTTP du RAG (`/health`, `/query` nominale/vide/token/ville). Exit 0/1.
+- `eval_qualite.py` / `evaluate_rag.py` : `python eval/<script>.py` — réponses via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
+- Pas de CI pour `eval/` (ni workflow) : scripts manuels, service local + clés requis. Le workflow ne lance que `pytest` ( mocks, sans services).
+
 ## 2. Vue générale
 
 3 briques utiles :
