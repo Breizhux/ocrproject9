@@ -5,3 +5,5 @@ langchain-mistralai
 httpx
 streamlit
 python-dotenv
+fastapi
+uvicorn

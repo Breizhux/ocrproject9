@@ -27,7 +27,8 @@ COPY deploy/entrypoint.sh deploy/ragifix.yaml.tpl deploy/collector.yaml.tpl /opt
 RUN chmod +x /opt/deploy/entrypoint.sh \
     && mkdir -p /etc/ragifix /etc/ragifix-collector /var/lib/ragifix /var/lib/ragifix-collector /data
 
-# 8421 = ragifix, interne au conteneur (jamais publié). 8501 = Streamlit.
-EXPOSE 8501
+# 8421 = ragifix, interne au conteneur (jamais publié).
+# 8501 = Streamlit, 8000 = API chatbot (uvicorn).
+EXPOSE 8501 8000
 
 ENTRYPOINT ["/opt/deploy/entrypoint.sh"]

@@ -27,18 +27,19 @@ Tests : `pytest` (26 tests, ~99 % couverts). CLI : `python src/backend.py "quest
 
 #### Docker
 
-Un seul conteneur fait tourner les 3 briques : `ragifix` + `ragifix-collector` (clonés depuis GitHub) + le chatbot. Au démarrage : `ragifix` → attente `/health` → collector en one-shot en fond + Streamlit immédiat au premier plan (l'UI répond pendant l'indexation ; le chatbot dit "rien trouvé" tant que l'index est vide).
+Un seul conteneur fait tourner les 4 briques : `ragifix` + `ragifix-collector` (clonés depuis GitHub) + API chatbot + Streamlit. Au démarrage : `ragifix` → attente `/health` → collector en one-shot en fond + API (uvicorn, :8000) en fond + Streamlit immédiat au premier plan (:8501).
 
 ```bash
 cd ocrproject9
 cp deploy/.env.example deploy/.env  # renseigner les 7 variables (voir tableau)
 docker build -f deploy/Dockerfile -t ocrproject9 .
-docker run -d --name ocrproject9 --env-file deploy/.env -p 8501:8501 \
+docker run -d --name ocrproject9 --env-file deploy/.env \
+  -p 8501:8501 -p 8000:8000 \
   -v /chemin/hote/events_propres.csv:/data/events_propres.csv:ro \
   -v ocr9-ragdata:/var/lib/ragifix \
   -v ocr9-state:/var/lib/ragifix-collector \
   ocrproject9
-# puis http://localhost:8501
+# puis http://localhost:8501 (UI) et http://localhost:8000/docs (API, Swagger)
 ```
 
 `deploy/.env` (seul fichier de config à remplir) :

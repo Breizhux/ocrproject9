@@ -4,7 +4,8 @@
 #   2. rend les YAML ragifix/collector depuis les templates,
 #   3. démarre ragifix en fond + attente /health,
 #   4. lance le collector en one-shot EN FOND (Streamlit ne l'attend pas),
-#   5. bascule sur Streamlit au premier plan.
+#   5. lance l'API chatbot (uvicorn) EN FOND sur 8000,
+#   6. bascule sur Streamlit au premier plan (8501).
 set -euo pipefail
 
 # --- 1. Config requise (voir deploy/.env.example) ---
@@ -69,7 +70,13 @@ ragifix-collector --config /etc/ragifix-collector/config.yaml >/var/log/ocrproje
 COL_PID=$!
 echo "collector lancé en fond (pid ${COL_PID})."
 
-# --- 8. Chatbot au premier plan ---
-trap "kill ${RAG_PID} ${COL_PID} 2>/dev/null" EXIT
+# --- 8. API chatbot (uvicorn) EN FOND : sans auth, sans réindexation ---
+uvicorn api:app --app-dir /opt/chatbot/src --host 0.0.0.0 --port 8000 \
+    >/var/log/ocrproject9/api.log 2>&1 &
+API_PID=$!
+echo "API chatbot lancée en fond sur :8000 (pid ${API_PID})."
+
+# --- 9. Chatbot au premier plan ---
+trap "kill ${RAG_PID} ${COL_PID} ${API_PID} 2>/dev/null" EXIT
 exec streamlit run /opt/chatbot/src/app.py \
     --server.address 0.0.0.0 --server.port 8501 --server.headless true
