@@ -1,4 +1,4 @@
-# ocrproject9 — chatbot Événements (Étape 4, POC)
+# ocrproject9
 
 Chatbot RAG minimaliste. Il interroge le RAG existant et génère des réponses en français avec LangChain + Mistral.
 
@@ -23,12 +23,31 @@ streamlit run src/app.py
 
 Tests : `pytest` (26 tests, ~99 % couverts). CLI : `python src/backend.py "question ?" --city Paris --top-k 5`.
 
+## API REST (`src/api.py`, FastAPI, sans auth, sans réindexation)
+
+Lancement depuis `ocrproject9/` (RAG + boîte LLM lancés, `.env` renseigné) :
+
+```bash
+set -a && source .env && set +a
+uvicorn api:app --app-dir src --port 8000
+```
+
+Interrogation :
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" -d '{"question":"concert ce week-end ?","city":"Marseille","top_k":5}'
+```
+`POST /ask` (`question` requise, `city`/`top_k`/`date_min`/`date_max` optionnels) → `{"reponse","sources":[{"contenu","metadata"}]}` ; question vide → 422, panne RAG → 502. `GET /health` → `{"status":"ok"}`. L'app Streamlit n'utilise pas cette API (en attente décision).
+
 ## Eval (`eval/`, requiert RAG + boîte LLM lancés, `.env` renseigné)
 
-- `dataset.jsonl` : 10 QA annotées (`question`/`city`/`top_k`/`reponse_attendue`).
-- `api_test.py` : `python eval/api_test.py` — 5 checks HTTP du RAG (`/health`, `/query` nominale/vide/token/ville). Exit 0/1.
-- `eval_qualite.py` / `evaluate_rag.py` : `python eval/<script>.py` — réponses via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
-- Pas de CI pour `eval/` (ni workflow) : scripts manuels, service local + clés requis. Le workflow ne lance que `pytest` ( mocks, sans services).
+- `dataset.jsonl` : 10 questions/réponses annotées.
+- `api_test.py` : 5 checks HTTP du RAG (`/health`, `/query` nominale/vide/token/ville).
+   `python eval/api_test.py`
+- `eval_qualite.py` / `evaluate_rag.py` : réponses via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
+   `python eval/<script>.py`
+
+→ Pas de CI pour `eval/` : scripts manuels, service local + clés requis. Le workflow ne lance que `pytest` (mocks, sans services).
 
 ## 2. Vue générale
 

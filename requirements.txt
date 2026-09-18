@@ -7,3 +7,5 @@ pytest
 pytest-cov
 thefuzz
 model2vec
+fastapi
+uvicorn
