@@ -1,20 +1,10 @@
-"""Test fonctionnel de l'API RAG (ragifix) via HTTP — Étape 5.
-
-Usage : `python eval/api_test.py` (depuis ocrproject9, venv activé).
-Pré-requis : ragifix lancé (`RAG_BASE_URL`) + `.env` renseigné.
-NON intégrable au CI GitHub : requiert le RAG local + des clés.
-
-Vérifie : /health, POST /query nominal, question vide,
-token invalide (401), filtre ville inexistante (vide, sans erreur).
-Sortie : lignes [OK]/[KO] sur stdout, exit 0 si tout passe, 1 sinon.
-"""
 import sys
 from pathlib import Path
 
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from config import RAG_BASE_URL, RAGIFIX_API_TOKEN  # noqa: E402
+from config import RAG_BASE_URL, RAGIFIX_API_TOKEN
 
 TIMEOUT = 20.0
 

@@ -2,7 +2,9 @@
 
 Chatbot RAG minimaliste. Il interroge le RAG existant et génère des réponses en français avec LangChain + Mistral.
 
-## 1. Installation (environnement de développement)
+## 1. Installation
+
+#### Environnement de développement
 
 ```bash
 cd ocrproject9
@@ -23,7 +25,33 @@ streamlit run src/app.py
 
 Tests : `pytest` (26 tests, ~99 % couverts). CLI : `python src/backend.py "question ?" --city Paris --top-k 5`.
 
-## API REST (`src/api.py`, FastAPI, sans auth, sans réindexation)
+#### Docker
+
+Un seul conteneur fait tourner les 3 briques : `ragifix` + `ragifix-collector` (clonés depuis GitHub) + le chatbot. Au démarrage : `ragifix` → attente `/health` → collector en one-shot en fond + Streamlit immédiat au premier plan (l'UI répond pendant l'indexation ; le chatbot dit "rien trouvé" tant que l'index est vide).
+
+```bash
+cd ocrproject9
+cp deploy/.env.example deploy/.env  # renseigner les 7 variables (voir tableau)
+docker build -f deploy/Dockerfile -t ocrproject9 .
+docker run -d --name ocrproject9 --env-file deploy/.env -p 8501:8501 \
+  -v /chemin/hote/events_propres.csv:/data/events_propres.csv:ro \
+  -v ocr9-ragdata:/var/lib/ragifix \
+  -v ocr9-state:/var/lib/ragifix-collector \
+  ocrproject9
+# puis http://localhost:8501
+```
+
+`deploy/.env` (seul fichier de config à remplir) :
+
+| Variable | Exemple |
+|---|---|
+| `EVENTS_CSV_PATH` | `/data/events_propres.csv` (CSV monté en volume, jamais commité) |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | `https://api.mistral.ai/v1` / clé / `mistral-embed` |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | vide (= Mistral) / clé / `mistral-small-latest` |
+
+Le reste est fixé dans les templates (`deploy/*.yaml.tpl`, repris des configs actuelles) : source forcément `csv_events`, chunking, FAISS, chemins internes. Le token ragifix est généré à chaque démarrage (sauf `RAGIFIX_API_TOKEN` fourni). Les volumes nommés conservent l'index FAISS + les curseurs : le 1er démarrage ingère tout (via API d'embedding), les suivants sont quasi instantanés.
+
+## 2. Exécution de l'API REST
 
 Lancement depuis `ocrproject9/` (RAG + boîte LLM lancés, `.env` renseigné) :
 
@@ -35,11 +63,16 @@ uvicorn api:app --app-dir src --port 8000
 Interrogation :
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" -d '{"question":"concert ce week-end ?","city":"Marseille","top_k":5}'
+curl -X POST http://127.0.0.1:8000/ask \
+    -H "Content-Type: application/json" \
+    -d '{"question":"concert ce week-end ?","city":"Marseille","top_k":5}'
 ```
-`POST /ask` (`question` requise, `city`/`top_k`/`date_min`/`date_max` optionnels) → `{"reponse","sources":[{"contenu","metadata"}]}` ; question vide → 422, panne RAG → 502. `GET /health` → `{"status":"ok"}`. L'app Streamlit n'utilise pas cette API (en attente décision).
 
-## Eval (`eval/`, requiert RAG + boîte LLM lancés, `.env` renseigné)
+## Documentation
+
+### Dossier eval/ (scripts manuels, jamais de CI)
+
+`tests/` tourne en CI sans rien lancer (tout est simulé). `eval/` se lance à la main contre les vrais services (RAG, LLM, clés). `api_test.py` est donc ici : vérifier que le RAG répond exige un RAG lancé.
 
 - `dataset.jsonl` : 10 questions/réponses annotées.
 - `api_test.py` : 5 checks HTTP du RAG (`/health`, `/query` nominale/vide/token/ville).
@@ -47,9 +80,7 @@ curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" -d '{
 - `eval_qualite.py` / `evaluate_rag.py` : réponses via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
    `python eval/<script>.py`
 
-→ Pas de CI pour `eval/` : scripts manuels, service local + clés requis. Le workflow ne lance que `pytest` (mocks, sans services).
-
-## 2. Vue générale
+### Vue générale
 
 3 briques utiles :
 
@@ -60,6 +91,10 @@ flowchart LR
     API -->|POST /query| BOT[ocrproject9<br/>chatbot]
     BOT --> user((utilisateur))
 ```
+
+### Pourquoi 4 dépôts ?
+
+La consigne suppose un seul dépôt, mais le RAG préexistait (alternance Niji) en 3 briques : `ragifix` (API), `ragifix-collector` (ETL). `ocrproject9` est uniquement le chatbot Étape 4, qui réutilise ce RAG sans le modifier.
 
 ## 3. Détail des briques
 
@@ -83,32 +118,3 @@ sequenceDiagram
     B-->>A: réponse + sources
 ```
 
-## 4. Pourquoi 4 dépôts ?
-
-La consigne suppose un seul dépôt, mais le RAG préexistait (alternance Niji) en 3 briques : `ragifix` (API), `ragifix-collector` (ETL). `ocrproject9` est uniquement le chatbot Étape 4, qui réutilise ce RAG sans le modifier.
-
-## 5. Déploiement Docker (tout-en-un)
-
-Un seul conteneur fait tourner les 3 briques : `ragifix` + `ragifix-collector` (toujours clonés depuis GitHub, branche `ocr`) + le chatbot. Au démarrage : `ragifix` → attente `/health` → collector en one-shot **en fond** + Streamlit immédiat au premier plan (l'UI répond pendant l'indexation ; le chatbot dit « rien trouvé » tant que l'index est vide). Seul le port **8501** est exposé (`8421` reste interne).
-
-```bash
-cd ocrproject9
-cp deploy/.env.example deploy/.env  # renseigner les 7 variables (voir tableau)
-docker build -f deploy/Dockerfile -t ocrproject9 .
-docker run -d --name ocrproject9 --env-file deploy/.env -p 8501:8501 \
-  -v /chemin/hote/events_propres.csv:/data/events_propres.csv:ro \
-  -v ocr9-ragdata:/var/lib/ragifix \
-  -v ocr9-state:/var/lib/ragifix-collector \
-  ocrproject9
-# puis http://localhost:8501
-```
-
-`deploy/.env` (seul fichier de config à remplir) :
-
-| Variable | Exemple |
-|---|---|
-| `EVENTS_CSV_PATH` | `/data/events_propres.csv` (CSV monté en volume, jamais commité) |
-| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | `https://api.mistral.ai/v1` / clé / `mistral-embed` |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | vide (= Mistral) / clé / `mistral-small-latest` |
-
-Le reste est fixé dans les templates (`deploy/*.yaml.tpl`, repris des configs actuelles) : source forcément `csv_events`, chunking, FAISS, chemins internes. Le token ragifix est généré à chaque démarrage (sauf `RAGIFIX_API_TOKEN` fourni). Les volumes nommés conservent l'index FAISS + les curseurs : le 1er démarrage ingère tout (via API d'embedding), les suivants sont quasi instantanés.

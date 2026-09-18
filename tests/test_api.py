@@ -46,10 +46,10 @@ def test_ask_panne_rag_renvoie_502(monkeypatch):
     assert "RAG injoignable" in r.json()["detail"]
 
 
-def test_ask_sans_auth_ni_cle():
-    # Pas d'authentification : une requete nue ne doit jamais faire 401/403.
-    r = client.post("/ask", json={"question": "x"})
-    assert r.status_code not in (401, 403)
+def test_ask_sans_auth_ni_cle(monkeypatch):
+    # Pas d'authentification : une requete nue aboutit (200, jamais 401/403).
+    monkeypatch.setattr(api, "ask", lambda *a, **k: {"answer": "ok", "sources": []})
+    assert client.post("/ask", json={"question": "x"}).status_code == 200
 
 
 def test_health():

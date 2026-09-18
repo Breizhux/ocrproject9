@@ -1,25 +1,12 @@
-"""Eval (Étape 5, evaluate_rag.py) : cosinus réponse système vs réponse humaine.
-
-Usage : `python eval/evaluate_rag.py` (depuis ocrproject9, venv activé).
-Base : `eval/dataset.jsonl` (question/city/top_k/reponse_attendue).
-Pré-requis : ragifix lancé + boîte LLM (`ocrproject9/.env`).
-NON intégrable au CI GitHub : requiert le RAG local + des clés.
-
-Métrique unique, 100 % mathématique (Étape 4 : « même sens » = correct) :
-similarité cosinus entre les embeddings Model2Vec locaux de la réponse
-produite par ask() et de la réponse annotée. Pas de LLM-juge, pas de Ragas.
-Sortie stdout, exit toujours 0.
-"""
 import json
 import math
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
+import httpx
 from model2vec import StaticModel
 
-from backend import ask
+API = "http://127.0.0.1:8000"
 
 DATA = os.path.join(os.path.dirname(__file__), "dataset.jsonl")
 MODEL = "minishlab/M2V_multilingual_output"  # même modèle que eval_qualite.py
@@ -32,14 +19,28 @@ def cosine(a: list, b: list) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
+def get_answer(question: str, city: str = "", top_k: int = 5) -> str:
+    """Interroge l'API chatbot (POST /ask). Lève httpx.HTTPError en cas d'échec."""
+    r = httpx.post(f"{API}/ask", json={"question": question, "city": city,
+                                       "top_k": top_k}, timeout=120)
+    r.raise_for_status()
+    return r.json()["reponse"]
+
+
 def main():
+    try:
+        httpx.get(f"{API}/health", timeout=5).raise_for_status()
+    except httpx.HTTPError:
+        print(f"ERREUR : API chatbot injoignable sur {API}. "
+              "Lance-la : uvicorn api:app --app-dir src --port 8000")
+        return
     model = StaticModel.from_pretrained(MODEL)
     rows = [json.loads(line) for line in open(DATA, encoding="utf-8") if line.strip()]
     scores = []
     for i, row in enumerate(rows, 1):
         try:
-            got = ask(row["question"], city=row.get("city", ""),
-                      top_k=row.get("top_k", 5))["answer"]
+            got = get_answer(row["question"], city=row.get("city", ""),
+                             top_k=row.get("top_k", 5))
         except Exception as e:
             print(f"[{i}] {row['question'][:60]}... -> ERREUR : {e}")
             continue
