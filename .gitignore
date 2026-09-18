@@ -7,3 +7,11 @@ deploy/.env
 .pytest_cache/
 .coverage
 eval/resultats.md
+*.drawio
+*.docx
+*.csv
+*.bkp
+# Exceptions : rapport + schéma (docs) et corpus propre (datas) versionnés
+!docs/*.docx
+!docs/*.drawio
+!datas/*.csv
