@@ -1,54 +1,56 @@
+"""Eval sources POC : interroge le RAG (POST /query) et compare les uids
+obtenus aux sources attendues du dataset. Sortie stdout.
+
+Pré-requis : RAG lancé (GET /health) + token dans RAGIFIX_API_TOKEN.
+"""
 import json
-import math
 import os
-import sys
 
 import httpx
-from model2vec import StaticModel
 
-API = "http://127.0.0.1:8000"
+RAG = os.environ.get("RAG_BASE_URL", "http://127.0.0.1:8421")
+TOKEN = os.environ.get("RAGIFIX_API_TOKEN", "")
 
 DATA = os.path.join(os.path.dirname(__file__), "dataset.jsonl")
-MODEL = "minishlab/M2V_multilingual_output"  # même modèle que eval_qualite.py
 
 
-def cosine(a: list, b: list) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    return dot / (na * nb) if na and nb else 0.0
-
-
-def get_answer(question: str, city: str = "", top_k: int = 5) -> str:
-    """Interroge l'API chatbot (POST /ask). Lève httpx.HTTPError en cas d'échec."""
-    r = httpx.post(f"{API}/ask", json={"question": question, "city": city,
-                                       "top_k": top_k}, timeout=120)
+def get_sources(question: str, city: str = "", top_k: int = 5) -> list:
+    """Interroge le RAG (POST /query), renvoie les uids obtenus."""
+    filters = {"city": city} if city.strip() else {}
+    r = httpx.post(f"{RAG}/query",
+                   json={"query": question, "top_k": top_k, "filters": filters},
+                   headers={"Authorization": f"Bearer {TOKEN}"},
+                   timeout=120)
     r.raise_for_status()
-    return r.json()["reponse"]
+    return [str(res["metadata"]["uid"]) for res in r.json().get("results", [])]
 
 
 def main():
-    try:
-        httpx.get(f"{API}/health", timeout=5).raise_for_status()
-    except httpx.HTTPError:
-        print(f"ERREUR : API chatbot injoignable sur {API}. "
-              "Lance-la : uvicorn api:app --app-dir src --port 8000")
+    if not TOKEN:
+        print("ERREUR : RAGIFIX_API_TOKEN manquant dans l'environnement.")
         return
-    model = StaticModel.from_pretrained(MODEL)
+    try:
+        httpx.get(f"{RAG}/health", timeout=5).raise_for_status()
+    except httpx.HTTPError:
+        print(f"ERREUR : RAG injoignable sur {RAG}.")
+        return
     rows = [json.loads(line) for line in open(DATA, encoding="utf-8") if line.strip()]
-    scores = []
+    total_ok, total_exp = 0, 0
     for i, row in enumerate(rows, 1):
+        exp = row.get("sources", [])
         try:
-            got = get_answer(row["question"], city=row.get("city", ""),
-                             top_k=row.get("top_k", 5))
+            # top_k = nb de sources attendues, plafonné au max accepté par le RAG (100)
+            got = get_sources(row["question"], city=row.get("city", ""),
+                              top_k=min(len(exp), 100) or row.get("top_k", 5))
         except Exception as e:
             print(f"[{i}] {row['question'][:60]}... -> ERREUR : {e}")
             continue
-        va, vb = model.encode([got[:4000], row["reponse_attendue"]])
-        c = cosine(va, vb)
-        scores.append(c)
-        print(f"[{i}] {row['question'][:60]}... -> cos={c:.2f}")
-    print(f"\nMOYENNE cos={sum(scores)/len(scores):.2f} (n={len(scores)})")
+        ok = len([u for u in exp if u in got])
+        total_ok += ok
+        total_exp += len(exp)
+        print(f"[{i}] {row['question'][:60]}... -> {ok}/{len(exp)}")
+    pct = 100 * total_ok / total_exp if total_exp else 0
+    print(f"\nNOTE GLOBALE sources={total_ok}/{total_exp} ({pct:.0f}%)")
 
 
 if __name__ == "__main__":

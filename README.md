@@ -75,11 +75,13 @@ curl -X POST http://127.0.0.1:8000/ask \
 
 `tests/` tourne en CI sans rien lancer (tout est simulé). `eval/` se lance à la main contre les vrais services (RAG, LLM, clés). `api_test.py` est donc ici : vérifier que le RAG répond exige un RAG lancé.
 
-- `dataset.jsonl` : 10 questions/réponses annotées.
+- `dataset.jsonl` : 10 questions annotées + sources attendues (uid extrait du top-50 RAG, triées à la main).
 - `api_test.py` : 5 checks HTTP du RAG (`/health`, `/query` nominale/vide/token/ville).
    `python eval/api_test.py`
-- `eval_qualite.py` / `evaluate_rag.py` : réponses via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
-   `python eval/<script>.py`
+- `evaluate_rag.py` : interroge le RAG directement pour chaque question du dataset, compare les uid retournés aux sources attendues. Sort un score de rappel (recall) sur les sources.
+   `RAGIFIX_API_TOKEN=ocr-token python eval/evaluate_rag.py`
+- `eval_qualite.py` : évaluation qualitative via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
+   `python eval/eval_qualite.py`
 
 ### Vue générale
 
