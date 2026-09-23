@@ -46,17 +46,17 @@ La cohérence sémantique de l'événement est préservée à 100 %.
 Le fragment envoyé à ragifix est un fragment Markdown rempli à partir des données de l'événement :
 
 ```md
-## Titre de l'évène
-{titre de l'évène}
+## Titre de l'évènement
+{titre de l'évènement}
 
-## Date de l'évène
-{date de l'évène}
+## Date de l'évènement
+{date de l'évènement}
 
-## Adresse de l'évène
-{adresse de l'évène}
+## Adresse de l'évènement
+{adresse de l'évènement}
 
-## Description de l'évène
-{description de l'évène}
+## Description de l'évènement
+{description de l'évènement}
 ```
 
 **Règles de construction :**

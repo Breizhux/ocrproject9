@@ -8,7 +8,7 @@ deploy/.env
 .coverage
 eval/resultats.md
 *.drawio
-*.docx
+.docx
 *.csv
 *.bkp
 # Exceptions : rapport + schéma (docs) et corpus propre (datas) versionnés

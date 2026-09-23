@@ -2,6 +2,13 @@
 
 Chatbot RAG minimaliste. Il interroge le RAG existant et génère des réponses en français avec LangChain + Mistral.
 
+Le projet est basé sur ragifix, développé par mes soins au cours d'un autre projet :
+
+- [ragifix core](https://github.com/hephaistools/ragifix)
+
+- [ragifix-collector](https://github.com/hephaistools/ragifix-collector)
+
+
 ## 1. Installation
 
 #### Environnement de développement
@@ -11,7 +18,11 @@ cd ocrproject9
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # renseigner les clés
+
+# renseigner les clés
+cp .env.example .env
+set -a && source .env && set +a
+
 streamlit run src/app.py
 ```
 
@@ -22,8 +33,6 @@ streamlit run src/app.py
    - Optionnel :
       - `LLM_BASE_URL` : pour changer de fournisseur de LLM (openai compatible).
       - `LLM_MODEL` : nom du modèle à utiliser.
-
-Tests : `pytest` (26 tests, ~99 % couverts). CLI : `python src/backend.py "question ?" --city Paris --top-k 5`.
 
 #### Docker
 
@@ -42,15 +51,7 @@ docker run -d --name ocrproject9 --env-file deploy/.env \
 # puis http://localhost:8501 (UI) et http://localhost:8000/docs (API, Swagger)
 ```
 
-`deploy/.env` (seul fichier de config à remplir) :
-
-| Variable | Exemple |
-|---|---|
-| `EVENTS_CSV_PATH` | `/data/events_propres.csv` (CSV monté en volume, jamais commité) |
-| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | `https://api.mistral.ai/v1` / clé / `mistral-embed` |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | vide (= Mistral) / clé / `mistral-small-latest` |
-
-Le reste est fixé dans les templates (`deploy/*.yaml.tpl`, repris des configs actuelles) : source forcément `csv_events`, chunking, FAISS, chemins internes. Le token ragifix est généré à chaque démarrage (sauf `RAGIFIX_API_TOKEN` fourni). Les volumes nommés conservent l'index FAISS + les curseurs : le 1er démarrage ingère tout (via API d'embedding), les suivants sont quasi instantanés.
+`deploy/.env` (seul fichier de config à remplir) : *cf section précédente*
 
 ## 2. Exécution de l'API REST
 
@@ -77,11 +78,8 @@ curl -X POST http://127.0.0.1:8000/ask \
 
 - `dataset.jsonl` : 10 questions annotées + sources attendues (uid extrait du top-50 RAG, triées à la main).
 - `api_test.py` : 5 checks HTTP du RAG (`/health`, `/query` nominale/vide/token/ville).
-   `python eval/api_test.py`
-- `evaluate_rag.py` : interroge le RAG directement pour chaque question du dataset, compare les uid retournés aux sources attendues. Sort un score de rappel (recall) sur les sources.
-   `RAGIFIX_API_TOKEN=ocr-token python eval/evaluate_rag.py`
-- `eval_qualite.py` : évaluation qualitative via `ask()` + similarité à la réponse humaine (fuzzy+cos / cos). Score seul, pas de seuil.
-   `python eval/eval_qualite.py`
+- `evaluate_rag.py` : interroge le RAG directement pour chaque question du dataset, compare les uid retournés aux sources attendues. Sort un score de recall sur les sources.
+- `eval_qualite.py` : évaluation de la qualité des réponses du chatbot avec Ragas sur 3 métriques : `faithfulness` (fidélité au contexte), `context_precision` et `context_recall` (couverture documentaire).
 
 ### Vue générale
 
@@ -95,7 +93,7 @@ flowchart LR
     BOT --> user((utilisateur))
 ```
 
-### Pourquoi 4 dépôts ?
+### Pourquoi 3 dépôts ?
 
 La consigne suppose un seul dépôt, mais le RAG préexistait (alternance Niji) en 3 briques : `ragifix` (API), `ragifix-collector` (ETL). `ocrproject9` est uniquement le chatbot Étape 4, qui réutilise ce RAG sans le modifier.
 
